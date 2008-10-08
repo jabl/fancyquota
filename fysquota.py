@@ -22,7 +22,7 @@
 This program tries to print out quota in a sensible way that works with the
 automounter.  
 
-Put the environment variables pointing to directories that must be checked into
+Put the environment variables pointing to directories that must be visited into
 the fs_env list. Alternatively, put the directories directly into the fs_dir
 list.
 
@@ -33,36 +33,52 @@ fs_dir = []
 
 import os
 
-def visit_fs():
-    """Visit file systems to ensure they are mounted."""
+def env_dirs():
+    """Get the list of directories pointed to by fs_env."""
+    edirs = {}
     for env in fs_env:
         dir = os.getenv(env)
         if dir != None:
-           fs_dir.append(dir)
-    [os.path.exists(dir) for dir in fs_dir]
+            edirs[dir] = env
+    return edirs
+
+def visit_fs():
+    """Visit file systems to ensure they are mounted."""
+    dirs = env_dirs().keys()
+    [dirs.append(d) for d in fs_dir]
+    for dir in dirs:
+        try:
+            os.listdir(dir)
+        except OSError:
+            pass
+
+def mp_env():
+    """Return a dict of mountpoint : env variable pairs."""
+    edirs = env_dirs()
+    mp = {}
+    for line in open("/etc/mtab"):
+        ls = line.split()
+        if ls[1] in edirs:
+            for dir in edirs:
+                if dir == ls[1]:
+                    mp[ls[0]] = edirs[dir]
+    return mp
 
 def map_fs(fs):
     """Try to map the filesystem to one of the env variables."""
-    for line in open("/etc/mtab"):
-        ls = line.split()
-        if ls[0] == fs:
-            fs = ls[1]
-            break
-    for env in fs_env:
-        edir = os.getenv(env)
-        if edir != None:
-            if edir == fs:
-                return env
-    # Failed exact path match, try to match to path components starting from
-    # the end (error prone..)
-    for env in fs_env:
-        edir = os.getenv(env)
-        if edir != None:
-            eds = edir.split("/")
-            eds.reverse()
-            for ed in eds:
-                if ed in fs:
-                    return env
+    mp = mp_env()
+    for k in mp.keys():
+        if k == fs:
+            return mp[k]
+    # Failed exact path match, try to match to path components by chopping
+    # off components starting from the end.
+    fss = fs.split("/")
+    for ii in range(1, len(fss)):
+        fsc = '/'.join(fss[:-ii])
+        for k in mp.keys():
+            ks = "/".join(k.split('/')[:-ii])
+            if ks == fsc:
+                return mp[k]
     return fs
 
 def print_quota(quota):
@@ -87,7 +103,7 @@ def print_quota(quota):
             use = float(use)/1000**2
             q = float(fsq[k][1])/1000**2
             pcent = use / q * 100
-            print "%-20s    %7.2f    %7.2f    %4.1f %%" % (k, use, q, pcent)
+            print "%-20s    %7.2f    %7.2f      %4.1f" % (k, use, q, pcent)
     
 
 def run_quota():
@@ -119,10 +135,15 @@ def run_quota():
     print_quota(myquota)
 
 
-
-
 def quota_main():
     """Main interface of the quota program."""
+    from optparse import OptionParser
+    usage = """%prog [options]
+
+Print out disk quotas in a nice way, try to work sensibly with the automounter.
+"""
+    parser = OptionParser(usage, version="1.0")
+    parser.parse_args()
     visit_fs()
     run_quota()
 
