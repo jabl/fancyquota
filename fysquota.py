@@ -113,7 +113,7 @@ def run_quota():
     bytes.
     
     """
-    p = os.popen("quota -ug")
+    p = os.popen("/usr/bin/quota -ug")
     fs = ""
     myquota = []
     for line in p.readlines():
@@ -140,9 +140,12 @@ def quota_main():
     from optparse import OptionParser
     usage = """%prog [options]
 
-Print out disk quotas in a nice way, try to work sensibly with the automounter.
+Print out disk quotas in a nice way, try to work with automounted 
+file systems.
 """
     parser = OptionParser(usage, version="1.0")
+    parser.add_option("-s", "--sensible-units", dest="sensible", \
+            action="store_true", help="Use sensible units in output (default)")
     parser.parse_args()
     visit_fs()
     run_quota()
