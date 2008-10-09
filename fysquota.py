@@ -99,18 +99,23 @@ def map_fs(fs, mp):
         if k == fs:
             return mp[k]
     # Failed exact path match, try to match to path components by chopping
-    # off components starting from the end.
-    fss = fs.split("/")
-    for ii in range(1, len(fss)):
-        fsc = '/'.join(fss[:-ii])
-        for k in mp.keys():
-            ks = "/".join(k.split('/')[:-ii])
-            if ks == fsc:
-                return mp[k]
+    # off a component from the end. This should deal with the automounter
+    # wildcard mounts hopefully without accidentally matching incorrectly.
+    fschop = os.path.dirname(fs)
+    for k in mp.keys():
+        kc = os.path.dirname(k)
+        if kc == fschop:
+            return mp[k]
     return fs
 
 def print_quota(quota):
     """Pretty print quotas."""
+    dlen = 12
+    for ug in quota:
+        for vals in ug[1].keys():
+            td = len(vals) + 4
+            if td > dlen:
+                dlen = td
     first = True
     for ug in quota:
         fsq = ug[1]
@@ -122,16 +127,17 @@ def print_quota(quota):
         if first:
             first = False
         else:
-            print '===================================================='
+            print '-' * (dlen + 32)
         print 'Quota for ' + ug[0] + ' in units of GB'
-        print 'Directory                 Usage      Quota    % used'
-        print '----------------------------------------------------'
+        hfmt = "%-" + str(dlen) + "s    %7s %10s %9s"
+        print hfmt % ('Directory', 'Usage', 'Quota', '% used')
         for k in fsq.keys():
             use = fsq[k][0].replace('*', ' ')
             use = float(use)/1000**2
             q = float(fsq[k][1])/1000**2
             pcent = use / q * 100
-            print "%-20s    %7.2f    %7.2f      %4.1f" % (k, use, q, pcent)
+            fmt = "%-" + str(dlen) + "s    %7.2f    %7.2f      %4.1f"
+            print fmt % (k, use, q, pcent)
     
 
 def run_quota():
@@ -172,7 +178,7 @@ def quota_main():
 Print out disk quotas in a nice way, try to work with automounted 
 file systems.
 """
-    parser = OptionParser(usage, version="1.1")
+    parser = OptionParser(usage, version="1.2")
     parser.add_option("-s", "--sensible-units", dest="sensible", \
             action="store_true", help="Use sensible units in output (default)")
     parser.parse_args()
