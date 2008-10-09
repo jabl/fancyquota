@@ -64,7 +64,7 @@ def mp_env():
     for dir in edirs.keys():
 	mpdir = dir
 	while not os.path.ismount(mpdir):
-	    mpdir = os.path.split(mpdir)[0]
+	    mpdir = os.path.dirname(mpdir)
 	mp[mpdir] = edirs[dir]
     return mp
 
@@ -82,7 +82,7 @@ def fs_env_map():
     for fscand in mp.keys():
 	fspath = fscand
 	while not os.path.ismount(fspath) and not fspath == '':
-	    fspath = os.path.split(fspath)[0]
+	    fspath = os.path.dirname(fspath)
 	if fspath != '/':
 	   # We probably found a bind mountpoint
 	   for line in lines:
