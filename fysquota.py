@@ -172,7 +172,7 @@ def quota_main():
 Print out disk quotas in a nice way, try to work with automounted 
 file systems.
 """
-    parser = OptionParser(usage, version="1.0")
+    parser = OptionParser(usage, version="1.1")
     parser.add_option("-s", "--sensible-units", dest="sensible", \
             action="store_true", help="Use sensible units in output (default)")
     parser.parse_args()
