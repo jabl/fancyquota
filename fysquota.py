@@ -34,7 +34,7 @@ fs_dir = []
 import os
 
 def env_dirs():
-    """Get the list of directories pointed to by fs_env."""
+    """Get a dict of directories:env pointed to by fs_env."""
     edirs = {}
     for env in fs_env:
         dir = os.getenv(env)
@@ -53,20 +53,48 @@ def visit_fs():
             pass
 
 def mp_env():
-    """Return a dict of mountpoint : env variable pairs."""
+    """Return a dict of mounpoint:env_var pairs.
+    
+    Note that the visit_fs function should have been called before calling
+    this function.
+    
+    """
     edirs = env_dirs()
     mp = {}
-    for line in open("/etc/mtab"):
-        ls = line.split()
-        if ls[1] in edirs:
-            for dir in edirs:
-                if dir == ls[1]:
-                    mp[ls[0]] = edirs[dir]
+    for dir in edirs.keys():
+	mpdir = dir
+	while not os.path.ismount(mpdir):
+	    mpdir = os.path.split(mpdir)[0]
+	mp[mpdir] = edirs[dir]
     return mp
 
-def map_fs(fs):
+def fs_env_map():
+    """Return a dict of filesystem : env variable pairs."""
+    edirs = mp_env()
+    mp = {}
+    f = open("/etc/mtab")
+    lines = f.readlines()
+    f.close()
+    for line in lines:
+        ls = line.split()
+        if ls[1] in edirs:
+	    mp[ls[0]] = edirs[ls[1]]
+    for fscand in mp.keys():
+	fspath = fscand
+	while not os.path.ismount(fspath) and not fspath == '':
+	    fspath = os.path.split(fspath)[0]
+	if fspath != '/':
+	   # We probably found a bind mountpoint
+	   for line in lines:
+	       ls = line.split()
+	       if ls[1] == fspath:
+		   tmpval = mp[fscand]
+		   del mp[fscand]
+		   mp[ls[0]] = tmpval
+    return mp
+
+def map_fs(fs, mp):
     """Try to map the filesystem to one of the env variables."""
-    mp = mp_env()
     for k in mp.keys():
         if k == fs:
             return mp[k]
@@ -115,6 +143,7 @@ def run_quota():
     """
     p = os.popen("/usr/bin/quota -ug")
     fs = ""
+    mp = fs_env_map()
     myquota = []
     for line in p.readlines():
         if line.find("Disk quotas for") != -1:
@@ -125,12 +154,12 @@ def run_quota():
             ls = line.split()
             if len(ls) == 1:
                 splitline = True
-                fs = map_fs(ls[0])
+                fs = map_fs(ls[0], mp)
             elif splitline:
                 curlist[fs] = (ls[0], ls[1])
                 splitline = False
             else:
-                curlist[map_fs(ls[0])] = (ls[1], ls[2])
+                curlist[map_fs(ls[0], mp)] = (ls[1], ls[2])
     p.close()
     print_quota(myquota)
 
