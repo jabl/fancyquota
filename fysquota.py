@@ -106,7 +106,6 @@ def map_fs(fs, mp):
 
     fschop = os.path.dirname(fs)
     fsme = os.path.join(fschop, os.getenv("LOGNAME"))
-    print 'fsme: ', fsme
     foundme = False
     for line in open("/etc/mtab"):
         ls = line.split()[0]
