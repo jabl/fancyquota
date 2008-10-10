@@ -53,7 +53,7 @@ def visit_fs():
             pass
 
 def mp_env():
-    """Return a dict of mounpoint:env_var pairs.
+    """Return a dict of mountpoint:env_var pairs.
     
     Note that the visit_fs function should have been called before calling
     this function.
@@ -98,14 +98,25 @@ def map_fs(fs, mp):
     for k in mp.keys():
         if k == fs:
             return mp[k]
-    # Failed exact path match, try to match to path components by chopping
-    # off a component from the end. This should deal with the automounter
-    # wildcard mounts hopefully without accidentally matching incorrectly.
+
+    # Failed exact path match, try to match to path by chopping off a component
+    # from the end and replacing it with the username. This should deal with
+    # the automounter wildcard mounts hopefully without accidentally matching
+    # incorrectly.
+
     fschop = os.path.dirname(fs)
-    for k in mp.keys():
-        kc = os.path.dirname(k)
-        if kc == fschop:
-            return mp[k]
+    fsme = os.path.join(fschop, os.getenv("LOGNAME"))
+    print 'fsme: ', fsme
+    foundme = False
+    for line in open("/etc/mtab"):
+        ls = line.split()[0]
+        if ls == fsme:
+            foundme = True
+    if foundme:
+        if fsme in mp.keys():
+            return mp[fsme]
+        else:
+            return fsme
     return fs
 
 def print_quota(quota):
@@ -178,7 +189,7 @@ def quota_main():
 Print out disk quotas in a nice way, try to work with automounted 
 file systems.
 """
-    parser = OptionParser(usage, version="1.2")
+    parser = OptionParser(usage, version="1.3")
     parser.add_option("-s", "--sensible-units", dest="sensible", \
             action="store_true", help="Use sensible units in output (default)")
     parser.parse_args()
