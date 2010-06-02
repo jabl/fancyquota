@@ -1,6 +1,8 @@
 #!/usr/bin/python
-# vim: set fileencoding=latin-1
-# Copyright (c) 2008 Janne Blomqvist
+# -*- coding: utf-8 -*-
+# vim: set fileencoding=utf-8
+
+# Copyright (c) 2008, 2010 Janne Blomqvist
 
 #  This file is part of fysquota.
 
@@ -48,7 +50,7 @@ def visit_fs():
     [dirs.append(d) for d in fs_dir]
     for dir in dirs:
         try:
-            os.listdir(dir)
+            os.stat(dir)
         except OSError:
             pass
 
