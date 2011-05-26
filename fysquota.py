@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # vim: set fileencoding=utf-8
 
-# Copyright (c) 2008, 2010 Janne Blomqvist
+# Copyright (c) 2008, 2010, 2011 Janne Blomqvist
 
 #  This file is part of fysquota.
 
@@ -139,17 +139,22 @@ def print_quota(quota):
         if first:
             first = False
         else:
-            print '-' * (dlen + 32)
+            print '-' * (dlen + 49)
         print 'Quota for ' + ug[0] + ' in units of GB'
-        hfmt = "%-" + str(dlen) + "s    %7s %10s %9s"
-        print hfmt % ('Directory', 'Usage', 'Quota', '% used')
+        hfmt = "%-" + str(dlen) + "s %7s %10s %9s %9s %9s"
+        print hfmt % ('Directory', 'Usage', 'Quota', '% used', 'Limit', 'Grace')
         for k in fsq.keys():
             use = fsq[k][0].replace('*', ' ')
             use = float(use)/1000**2
             q = float(fsq[k][1])/1000**2
+            hq = float(fsq[k][2]) / 1000**2
+            if (hq > q):
+                grace = fsq[k][3]
+            else:
+                grace = ''
             pcent = use / q * 100
-            fmt = "%-" + str(dlen) + "s    %7.2f    %7.2f      %4.1f"
-            print fmt % (k, use, q, pcent)
+            fmt = "%-" + str(dlen) + "s %7.2f %10.2f %9.1f %9.2f %s"
+            print fmt % (k, use, q, pcent, hq, grace)
     
 
 def run_quota():
@@ -174,10 +179,10 @@ def run_quota():
                 splitline = True
                 fs = map_fs(ls[0], mp)
             elif splitline:
-                curlist[fs] = (ls[0], ls[1])
+                curlist[fs] = (ls[0], ls[1], ls[2], ls[3])
                 splitline = False
             else:
-                curlist[map_fs(ls[0], mp)] = (ls[1], ls[2])
+                curlist[map_fs(ls[0], mp)] = (ls[1], ls[2], ls[3], ls[4])
     p.close()
     print_quota(myquota)
 
@@ -190,7 +195,7 @@ def quota_main():
 Print out disk quotas in a nice way, try to work with automounted 
 file systems.
 """
-    parser = OptionParser(usage, version="1.3")
+    parser = OptionParser(usage, version="1.4")
     parser.add_option("-s", "--sensible-units", dest="sensible", \
             action="store_true", help="Use sensible units in output (default)")
     parser.parse_args()
