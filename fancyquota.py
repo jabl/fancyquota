@@ -28,101 +28,76 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 This program tries to print out quota in a sensible way that works with the
 automounter.  
 
-Put the environment variables pointing to directories that must be visited into
-the fs_env list. Alternatively, put the directories directly into the fs_dir
-list.
+The program tries to read a configuration file from the following locations
 
+/etc/fancyquota.cfg
+~/.config/fancyquota.cfg
+fancyquota.cfg
+
+In the config file, you can put a list of directories, and environment
+variables pointing to directories, which must be visited (i.e. make
+the automounter mount them if they are unmounted). Multiple entries
+can be present, separated by commas. An example config file:
+
+[visit]
+envs=HOME, WRKDIR
+dirs=/usr,/tmp
 """
-
-fs_env = ["HOME", "WRKDIR", "ARCHIVE"]
-fs_dir = []
 
 import os
 
-def env_dirs():
-    """Get a dict of directories:env pointed to by fs_env."""
-    edirs = {}
-    for env in fs_env:
-        dir = os.getenv(env)
-        if dir != None:
-            edirs[dir] = env
-    return edirs
+def parse_config():
+    import ConfigParser
+    home_conf = os.path.expanduser('~/.config/fancyquota.cfg')
+    config = ConfigParser.SafeConfigParser()
+    config.read(['/etc/fancyquota.cfg', home_conf, 'fancyquota.cfg'])
+    if not config.has_section('visit'):
+        return []
+    envstr = config.get('visit', 'envs')
+    dirs = []
+    for e in envstr.split(','):
+        d = os.getenv(e.strip())
+        if d:
+            dirs.append(d)
+    dirstr = config.get('visit', 'dirs')
+    for d in dirstr.split(','):
+        dirs.append(d.strip())
+    return dirs
 
-def visit_fs():
+def visit_fs(dirs):
     """Visit file systems to ensure they are mounted."""
-    dirs = env_dirs().keys()
-    [dirs.append(d) for d in fs_dir]
     for dir in dirs:
         try:
             os.stat(dir)
         except OSError:
             pass
 
-def mp_env():
-    """Return a dict of mountpoint:env_var pairs.
-    
-    Note that the visit_fs function should have been called before calling
-    this function.
-    
-    """
-    edirs = env_dirs()
-    mp = {}
-    for dir in edirs.keys():
-	mpdir = dir
-	while not os.path.ismount(mpdir):
-	    mpdir = os.path.dirname(mpdir)
-	mp[mpdir] = edirs[dir]
-    return mp
-
-def fs_env_map():
-    """Return a dict of filesystem : env variable pairs."""
-    edirs = mp_env()
-    mp = {}
-    f = open("/etc/mtab")
-    lines = f.readlines()
-    f.close()
-    for line in lines:
-        ls = line.split()
-        if ls[1] in edirs:
-	    mp[ls[0]] = edirs[ls[1]]
-    for fscand in mp.keys():
-	fspath = fscand
-	while not os.path.ismount(fspath) and not fspath == '':
-	    fspath = os.path.dirname(fspath)
-	if fspath != '/':
-	   # We probably found a bind mountpoint
-	   for line in lines:
-	       ls = line.split()
-	       if ls[1] == fspath:
-		   tmpval = mp[fscand]
-		   del mp[fscand]
-		   mp[ls[0]] = tmpval
-    return mp
+def read_mounts():
+    """Read /proc/self/mounts, return a {fs:[mountpoint,fstype]} dict"""
+    m = {}
+    with open('/proc/self/mounts') as f:
+        for line in f.readlines():
+            ls = line.split()
+            m[ls[0]] = [ls[1], ls[2]]
+    return m
 
 def map_fs(fs, mp):
-    """Try to map the filesystem to one of the env variables."""
-    for k in mp.keys():
-        if k == fs:
-            return mp[k]
+    """Map the filesystem to a mount point. 
 
-    # Failed exact path match, try to match to path by chopping off a component
-    # from the end and replacing it with the username. This should deal with
-    # the automounter wildcard mounts hopefully without accidentally matching
-    # incorrectly.
+    In case of autofs where quota confusingly reports the quota for
+    another file system, try to find the correct mount point.
+    """
+    # Try to match to another mountpoint by chopping off a component
+    # from the end and replacing it with the username. This should
+    # deal with the automounter wildcard mounts hopefully without
+    # accidentally matching incorrectly.
 
     fschop = os.path.dirname(fs)
     fsme = os.path.join(fschop, os.getenv("LOGNAME"))
-    foundme = False
-    for line in open("/etc/mtab"):
-        ls = line.split()[0]
-        if ls == fsme:
-            foundme = True
-    if foundme:
-        if fsme in mp.keys():
-            return mp[fsme]
-        else:
-            return fsme
-    return fs
+    if fsme in mp:
+        return mp[fsme]
+    else:
+        return mp[fs]
 
 def print_quota(quota):
     """Pretty print quotas."""
@@ -170,23 +145,24 @@ def run_quota():
     """
     p = os.popen("/usr/bin/quota -ug")
     fs = ""
-    mp = fs_env_map()
+    mp = read_mounts()
     myquota = []
     for line in p.readlines():
         if line.find("Disk quotas for") != -1:
-            current = " ".join(line.split()[3:5])
+            eind = line.find(' (')
+            current = " ".join(line[:eind].split()[3:])
             curlist = {}
             myquota.append((current, curlist))
         elif line.find("     Filesystem  blocks   quota   limit") == -1:
             ls = line.split()
             if len(ls) == 1:
                 splitline = True
-                fs = map_fs(ls[0], mp)
+                fs = map_fs(ls[0], mp)[0]
             elif splitline:
                 curlist[fs] = (ls[0], ls[1], ls[2], ls[3])
                 splitline = False
             else:
-                curlist[map_fs(ls[0], mp)] = (ls[1], ls[2], ls[3], ls[4])
+                curlist[map_fs(ls[0], mp)[0]] = (ls[1], ls[2], ls[3], ls[4])
     p.close()
     print_quota(myquota)
 
@@ -203,7 +179,8 @@ file systems.
     parser.add_option("-s", "--sensible-units", dest="sensible", \
             action="store_true", help="Use sensible units in output (default)")
     parser.parse_args()
-    visit_fs()
+    dirs = parse_config()
+    visit_fs(dirs)
     run_quota()
 
 
