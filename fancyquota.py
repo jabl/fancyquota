@@ -99,29 +99,33 @@ def map_fs(fs, mp):
     else:
         return mp[fs]
 
+def print_header():
+    """Print output header"""
+    hfmt = '%-19s %-20s %7s %7s %5s %7s %9s'
+    print hfmt % ('User/Group', 'Directory', 'Usage', 'Quota', 'Used%', 'Limit', 'Grace')
+
 def print_quota(quota):
     """Pretty print quotas."""
-    dlen = 12
-    for ug in quota:
-        for vals in ug[1].keys():
-            td = len(vals) + 4
-            if td > dlen:
-                dlen = td
-    first = True
+    fmt = "%-19s %-20s %7.1f %7.1f %5.0f %7.1f %s"
     for ug in quota:
         fsq = ug[1]
         quotas = []
         for vals in fsq.values():
             quotas.append(int(vals[1]))
-        if len(fsq) == 0 or True in [x < 2 for x in quotas]:
-            continue
-        if first:
-            first = False
+        s = ug[0].split()
+        ugstr = ''
+        for e in s[1:]:
+            ugstr += e
+        if s[0] == 'user':
+            if len(ugstr) < 13:
+                ugstr = 'user:' + ugstr
+            else:
+                ugstr = 'u:' + ugstr
         else:
-            print '-' * (dlen + 49)
-        print 'Quota for ' + ug[0] + ' in units of GB'
-        hfmt = "%-" + str(dlen) + "s %7s %10s %9s %9s %9s"
-        print hfmt % ('Directory', 'Usage', 'Quota', '%used', 'Limit', 'Grace')
+            if len(ugstr) < 12:
+                ugstr = 'group:' + ugstr
+            else:
+                ugstr = 'g:' + ugstr
         for k in fsq.keys():
             use = float(fsq[k][0])/1000**2
             q = float(fsq[k][1])/1000**2
@@ -131,8 +135,7 @@ def print_quota(quota):
             else:
                 grace = ''
             pcent = use / q * 100
-            fmt = "%-" + str(dlen) + "s %7.2f %10.2f %9.0f %9.2f %s"
-            print fmt % (k, use, q, pcent, hq, grace)
+            print fmt % (ugstr, k, use, q, pcent, hq, grace)
 
 def parse_quota_line(ls):
     """Parse the quota numbers output, return a tuple (usage, quota, limit, grace).
@@ -192,24 +195,10 @@ def run_quota(mp):
 
 def nfs_proj_quota(mps, done_mp):
     """XFS project quotas over NFS are shown as the size of the file system"""
-    showed_head = False
-    dlen = 12
+    fmt = "%-19s %-20s %7.1f %7s %5d %7.1f"
     for fs in mps:
         mp = map_fs(fs, mps)[0]
         if mps[fs][1][:3] == 'nfs' and mp not in done_mp:
-            td = len(mp) + 4
-            if td > dlen:
-                dlen = td
-    fmt = "%-" + str(dlen) + "s %7.2f %10.2f %9d"
-    for fs in mps:
-        mp = map_fs(fs, mps)[0]
-        if mps[fs][1][:3] == 'nfs' and mp not in done_mp:
-            if not showed_head:
-                print '-' * (dlen + 29)
-                print 'Project quotas'
-                hfmt = '%-' + str(dlen) + 's %7s %10s %9s'
-                print  hfmt % ('Directory', 'Usage', 'Quota', '% used')
-                showed_head = True
             svfs = os.statvfs(mp)
             used = svfs.f_blocks - svfs.f_bfree
             nonroot_tot = used + svfs.f_bavail
@@ -219,25 +208,26 @@ def nfs_proj_quota(mps, done_mp):
             #usage = float(svfs.f_blocks - svfs.f_bavail) * svfs.f_frsize / 1000**3
             #fssize = float(svfs.f_blocks) * svfs.f_frsize / 1000**3
             #used = float(usage) / fssize * 100
-            print  fmt % (mp, used * scale, nonroot_tot * scale, usedpct)
+            print  fmt % ('', mp, used * scale, '', usedpct, nonroot_tot * scale)
             
-    
 
 def quota_main():
     """Main interface of the quota program."""
     from optparse import OptionParser
     usage = """%prog [options]
 
-Print out disk quotas in a nice way, try to work with automounted 
-file systems.
+Print out disk quotas in a nice way, try to work with automounted file
+systems, and XFS project quotas over NFS. Quotas are reported in units
+of GB (1000**3 bytes).
 """
     parser = OptionParser(usage, version="1.4")
-    parser.add_option("-s", "--sensible-units", dest="sensible", \
-            action="store_true", help="Use sensible units in output (default)")
+    #parser.add_option("-s", "--sensible-units", dest="sensible", \
+    #        action="store_true", help="Use sensible units in output (default)")
     parser.parse_args()
     dirs = parse_config()
     visit_fs(dirs)
     fss = read_mounts()
+    print_header()
     done_mp = run_quota(fss)
     nfs_proj_quota(fss, done_mp)
 
