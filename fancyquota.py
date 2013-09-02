@@ -121,10 +121,9 @@ def print_quota(quota):
             print '-' * (dlen + 49)
         print 'Quota for ' + ug[0] + ' in units of GB'
         hfmt = "%-" + str(dlen) + "s %7s %10s %9s %9s %9s"
-        print hfmt % ('Directory', 'Usage', 'Quota', '% used', 'Limit', 'Grace')
+        print hfmt % ('Directory', 'Usage', 'Quota', '%used', 'Limit', 'Grace')
         for k in fsq.keys():
-            use = fsq[k][0].replace('*', ' ')
-            use = float(use)/1000**2
+            use = float(fsq[k][0])/1000**2
             q = float(fsq[k][1])/1000**2
             hq = float(fsq[k][2]) / 1000**2
             if (hq > q):
@@ -132,11 +131,32 @@ def print_quota(quota):
             else:
                 grace = ''
             pcent = use / q * 100
-            fmt = "%-" + str(dlen) + "s %7.2f %10.2f %9.1f %9.2f %s"
+            fmt = "%-" + str(dlen) + "s %7.2f %10.2f %9.0f %9.2f %s"
             print fmt % (k, use, q, pcent, hq, grace)
-    
 
-def run_quota():
+def parse_quota_line(ls):
+    """Parse the quota numbers output, return a tuple (usage, quota, limit, grace).
+
+    First 3 elements are integers, grace is a string.
+    """
+    if type(ls) == 'str':
+        ls = ls.split()
+    if len(ls) == 6: # Not over quota, grace field empty
+        q = (ls[0], ls[1], ls[2], '')
+    elif len(ls) == 7: # Either blocks or files quota exceeded
+        grace = ''
+        try:
+            tmp = int(ls[3])
+        except ValueError:
+            grace = line[3]
+            q = (ls[0], ls[1], ls[2], grace)
+    else: # Both files and block quota exceeded
+        q = (ls[0], ls[1], ls[2], ls[3])
+    # If over block quota, there will be a '*', remove it
+    qb = q[0].replace('*', '')
+    return (int(qb), int(q[1]), int(q[2]), q[3])
+
+def run_quota(mp):
     """Run the quota command and parse output.
     
     Checks both user and group quotas. Ignores file limits, just number of
@@ -145,7 +165,6 @@ def run_quota():
     """
     p = os.popen("/usr/bin/quota -ug")
     fs = ""
-    mp = read_mounts()
     myquota = []
     for line in p.readlines():
         if line.find("Disk quotas for") != -1:
@@ -159,13 +178,50 @@ def run_quota():
                 splitline = True
                 fs = map_fs(ls[0], mp)[0]
             elif splitline:
-                curlist[fs] = (ls[0], ls[1], ls[2], ls[3])
+                curlist[fs] = parse_quota_line(ls)
                 splitline = False
             else:
-                curlist[map_fs(ls[0], mp)[0]] = (ls[1], ls[2], ls[3], ls[4])
+                curlist[map_fs(ls[0], mp)[0]] = parse_quota_line(ls[1:])
     p.close()
     print_quota(myquota)
+    done_mp = set()
+    for q in myquota:
+        for e in q[1]:
+            done_mp.add(e)
+    return done_mp
 
+def nfs_proj_quota(mps, done_mp):
+    """XFS project quotas over NFS are shown as the size of the file system"""
+    showed_head = False
+    dlen = 12
+    for fs in mps:
+        mp = map_fs(fs, mps)[0]
+        if mps[fs][1][:3] == 'nfs' and mp not in done_mp:
+            td = len(mp) + 4
+            if td > dlen:
+                dlen = td
+    fmt = "%-" + str(dlen) + "s %7.2f %10.2f %9d"
+    for fs in mps:
+        mp = map_fs(fs, mps)[0]
+        if mps[fs][1][:3] == 'nfs' and mp not in done_mp:
+            if not showed_head:
+                print '-' * (dlen + 29)
+                print 'Project quotas'
+                hfmt = '%-' + str(dlen) + 's %7s %10s %9s'
+                print  hfmt % ('Directory', 'Usage', 'Quota', '% used')
+                showed_head = True
+            svfs = os.statvfs(mp)
+            used = svfs.f_blocks - svfs.f_bfree
+            nonroot_tot = used + svfs.f_bavail
+            u100 = used * 100
+            usedpct = u100 / nonroot_tot + (u100 % nonroot_tot != 0)
+            scale = float(svfs.f_frsize) / 1000**3
+            #usage = float(svfs.f_blocks - svfs.f_bavail) * svfs.f_frsize / 1000**3
+            #fssize = float(svfs.f_blocks) * svfs.f_frsize / 1000**3
+            #used = float(usage) / fssize * 100
+            print  fmt % (mp, used * scale, nonroot_tot * scale, usedpct)
+            
+    
 
 def quota_main():
     """Main interface of the quota program."""
@@ -181,7 +237,9 @@ file systems.
     parser.parse_args()
     dirs = parse_config()
     visit_fs(dirs)
-    run_quota()
+    fss = read_mounts()
+    done_mp = run_quota(fss)
+    nfs_proj_quota(fss, done_mp)
 
 
 if __name__=="__main__":
