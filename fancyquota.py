@@ -205,9 +205,6 @@ def nfs_proj_quota(mps, done_mp):
             u100 = used * 100
             usedpct = u100 / nonroot_tot + (u100 % nonroot_tot != 0)
             scale = float(svfs.f_frsize) / 1000**3
-            #usage = float(svfs.f_blocks - svfs.f_bavail) * svfs.f_frsize / 1000**3
-            #fssize = float(svfs.f_blocks) * svfs.f_frsize / 1000**3
-            #used = float(usage) / fssize * 100
             print  fmt % ('', mp, used * scale, '', usedpct, nonroot_tot * scale)
             
 
@@ -221,8 +218,6 @@ systems, and XFS project quotas over NFS. Quotas are reported in units
 of GB (1000**3 bytes).
 """
     parser = OptionParser(usage, version="1.4")
-    #parser.add_option("-s", "--sensible-units", dest="sensible", \
-    #        action="store_true", help="Use sensible units in output (default)")
     parser.parse_args()
     dirs = parse_config()
     visit_fs(dirs)
