@@ -113,19 +113,12 @@ def print_quota(quota):
         for vals in fsq.values():
             quotas.append(int(vals[1]))
         s = ug[0].split()
-        ugstr = ''
+        if s[0] == 'user':
+            ugstr = 'u:'
+        else:
+            ugstr = 'g:'
         for e in s[1:]:
             ugstr += e
-        if s[0] == 'user':
-            if len(ugstr) < 13:
-                ugstr = 'user:' + ugstr
-            else:
-                ugstr = 'u:' + ugstr
-        else:
-            if len(ugstr) < 12:
-                ugstr = 'group:' + ugstr
-            else:
-                ugstr = 'g:' + ugstr
         for k in fsq.keys():
             use = float(fsq[k][0])/1000**2
             q = float(fsq[k][1])/1000**2
@@ -151,7 +144,7 @@ def parse_quota_line(ls):
         try:
             tmp = int(ls[3])
         except ValueError:
-            grace = line[3]
+            grace = ls[3]
             q = (ls[0], ls[1], ls[2], grace)
     else: # Both files and block quota exceeded
         q = (ls[0], ls[1], ls[2], ls[3])
