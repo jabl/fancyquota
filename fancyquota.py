@@ -212,11 +212,18 @@ def run_quota(mp):
             curlist[map_fs(ls[0], mp)[0]] = (qb, int(ls[2]) * bs, \
                                                  int(ls[3]) * bs, int(ls[4]))
     p.close()
-    print_quota(myquota)
     done_mp = set()
     for q in myquota:
         for e in q[1]:
             done_mp.add(e)
+    for q in myquota:
+        mp_to_del = []        
+        for e in q[1]:
+            if not os.access(e, os.R_OK):
+                mp_to_del.append(e)
+        for e in mp_to_del:
+            del q[1][e]
+    print_quota(myquota)
     return done_mp
 
 def nfs_proj_quota(mps, done_mp):
@@ -225,6 +232,10 @@ def nfs_proj_quota(mps, done_mp):
     for fs in mps:
         mp = map_fs(fs, mps)[0]
         if mps[fs][1][:3] == 'nfs' and mp not in done_mp:
+            if not os.access(mp, os.R_OK):
+                # If the user doesn't have even read access, don't
+                # bother showing quota
+                continue
             svfs = os.statvfs(mp)
             used = svfs.f_blocks - svfs.f_bfree
             nonroot_tot = used + svfs.f_bavail
