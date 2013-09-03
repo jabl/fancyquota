@@ -244,23 +244,26 @@ def nfs_lustre_quota(fss, lquota):
     import urllib2, grp
     myquota = []
     kb = 1024
+    mygids = os.getgroups()
     for fs in fss:
         mp = map_fs(fs, fss)[0]
         for ld in lquota['dirs']:
             # O(n**2), argh
             if fss[fs][1][:3] == 'nfs' and ld in mp:
                 gid = os.stat(mp).st_gid
-                url = lquota['url'] + '/?gid=' + str(gid)
-                lquotares = urllib2.urlopen(url).read()
-                lls = lquotares.split()
-                if lls[4] == '-':
-                    grace = 0
-                else:
-                    grace = lls[4]
-                group = grp.getgrgid(gid).gr_name
-                myquota.append(("group " + group, \
-                                    {mp:(int(lls[1]) * kb, int(lls[2]) * kb, \
-                                             int(lls[3]) * kb, grace)}))
+                if gid in mygids:
+                    url = lquota['url'] + '/?gid=' + str(gid)
+                    lquotares = urllib2.urlopen(url).read()
+                    lls = lquotares.split()
+                    if lls[4] == '-':
+                        grace = 0
+                    else:
+                        grace = lls[4]
+                    group = grp.getgrgid(gid).gr_name
+                    myquota.append(("group " + group, \
+                                        {mp:(int(lls[1]) * kb, \
+                                                 int(lls[2]) * kb, \
+                                                 int(lls[3]) * kb, grace)}))
 
     print_quota(myquota)
     done_mp = set()
