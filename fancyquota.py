@@ -118,7 +118,8 @@ def print_quota(quota):
         else:
             ugstr = 'g:'
         for e in s[1:]:
-            ugstr += e
+            ugstr += e + ' '
+        ugstr = ugstr.strip()
         for k in fsq.keys():
             use = float(fsq[k][0])/1000**2
             q = float(fsq[k][1])/1000**2
