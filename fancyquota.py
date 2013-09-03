@@ -102,21 +102,21 @@ def map_fs(fs, mp):
 def size_to_human(val):
     """Convert a value in bytes to human readable format"""
     if val >= 10**15:
-        val /= 10**15
+        val /= 10.**15
         suff = 'P'
     elif val >= 10**12:
-        val /= 10**12
+        val /= 10.**12
         suff = 'T'
     elif val >= 10**9:
-        val /= 10**9
+        val /= 10.**9
         suff = 'G'
     elif val >= 10**6:
-        val /= 10**6
+        val /= 10.**6
         suff = 'M'
     elif val >= 10**3:
-        val /= 10**3
+        val /= 10.**3
         suff = 'k'
-    return str(val) + suff
+    return '%6.1f%s' % (val, suff)
 
 def print_header():
     """Print output header"""
