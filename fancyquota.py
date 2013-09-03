@@ -99,14 +99,40 @@ def map_fs(fs, mp):
     else:
         return mp[fs]
 
+def size_to_human(val):
+    """Convert a value in bytes to human readable format"""
+    if val >= 10**15:
+        val /= 10**15
+        suff = 'P'
+    elif val >= 10**12:
+        val /= 10**12
+        suff = 'T'
+    elif val >= 10**9:
+        val /= 10**9
+        suff = 'G'
+    elif val >= 10**6:
+        val /= 10**6
+        suff = 'M'
+    elif val >= 10**3:
+        val /= 10**3
+        suff = 'k'
+    return str(val) + suff
+
 def print_header():
     """Print output header"""
-    hfmt = '%-19s %-20s %7s %7s %5s %7s %9s'
-    print hfmt % ('User/Group', 'Directory', 'Usage', 'Quota', 'Used%', 'Limit', 'Grace')
+    hfmt = '%-19s %-20s %7s %5s %7s %7s %9s'
+    print hfmt % ('User/Group', 'Directory', 'Usage', 'Used%', 'Quota', 'Limit', 'Grace')
 
 def print_quota(quota):
-    """Pretty print quotas."""
-    fmt = "%-19s %-20s %7.1f %7.1f %5.0f %7.1f %s"
+    """Pretty print quotas.
+
+    Input is a list, where each element is a tuple (ug, qd), where
+    'ug' is a string 'user foo' or 'group bar' specifying which
+    user/group the quota applies to. 'qd' is a dict where the keys are
+    mountpoints, and the values is a tuple (usage, quota, limit,
+    grace) of ints.
+    """
+    fmt = "%-19s %-20s %7s %5.0f %7s %7s %s"
     for ug in quota:
         fsq = ug[1]
         quotas = []
@@ -121,37 +147,16 @@ def print_quota(quota):
             ugstr += e + ' '
         ugstr = ugstr.strip()
         for k in fsq.keys():
-            use = float(fsq[k][0])/1000**2
-            q = float(fsq[k][1])/1000**2
-            hq = float(fsq[k][2]) / 1000**2
+            use = size_to_human(fsq[k][0])
+            q = size_to_human(fsq[k][1])
+            hq = size_to_human(fsq[k][2])
             if (hq > q):
                 grace = fsq[k][3]
             else:
                 grace = ''
-            pcent = use / q * 100
-            print fmt % (ugstr, k, use, q, pcent, hq, grace)
+            pcent = float(fsq[k][0]) / fsq[k][1] * 100
+            print fmt % (ugstr, k, use, pcent, q, hq, grace)
 
-def parse_quota_line(ls):
-    """Parse the quota numbers output, return a tuple (usage, quota, limit, grace).
-
-    First 3 elements are integers, grace is a string.
-    """
-    if type(ls) == 'str':
-        ls = ls.split()
-    if len(ls) == 6: # Not over quota, grace field empty
-        q = (ls[0], ls[1], ls[2], '')
-    elif len(ls) == 7: # Either blocks or files quota exceeded
-        grace = ''
-        try:
-            tmp = int(ls[3])
-        except ValueError:
-            grace = ls[3]
-            q = (ls[0], ls[1], ls[2], grace)
-    else: # Both files and block quota exceeded
-        q = (ls[0], ls[1], ls[2], ls[3])
-    # If over block quota, there will be a '*', remove it
-    qb = q[0].replace('*', '')
-    return (int(qb), int(q[1]), int(q[2]), q[3])
 
 def run_quota(mp):
     """Run the quota command and parse output.
@@ -160,9 +165,10 @@ def run_quota(mp):
     bytes.
     
     """
-    p = os.popen("/usr/bin/quota -ug")
+    p = os.popen("/usr/bin/quota -ugwp")
     fs = ""
     myquota = []
+    bs = 1024 # BLOCK_SIZE from sys/mount.h
     for line in p.readlines():
         if line.find("Disk quotas for") != -1:
             eind = line.find(' (')
@@ -171,14 +177,11 @@ def run_quota(mp):
             myquota.append((current, curlist))
         elif line.find("     Filesystem  blocks   quota   limit") == -1:
             ls = line.split()
-            if len(ls) == 1:
-                splitline = True
-                fs = map_fs(ls[0], mp)[0]
-            elif splitline:
-                curlist[fs] = parse_quota_line(ls)
-                splitline = False
-            else:
-                curlist[map_fs(ls[0], mp)[0]] = parse_quota_line(ls[1:])
+            # If over block quota, there will be a '*', remove it
+            qb = int(ls[1].replace('*', '')) * bs
+            curlist[map_fs(ls[0], mp)[0]] = (qb, int(ls[2]) * bs, \
+                                                 int(ls[3]) * bs, \
+                                                 int(ls[4]) * bs)
     p.close()
     print_quota(myquota)
     done_mp = set()
@@ -189,7 +192,7 @@ def run_quota(mp):
 
 def nfs_proj_quota(mps, done_mp):
     """XFS project quotas over NFS are shown as the size of the file system"""
-    fmt = "%-19s %-20s %7.1f %7s %5d %7.1f"
+    fmt = "%-19s %-20s %7s %5d %7s %7s"
     for fs in mps:
         mp = map_fs(fs, mps)[0]
         if mps[fs][1][:3] == 'nfs' and mp not in done_mp:
@@ -198,8 +201,9 @@ def nfs_proj_quota(mps, done_mp):
             nonroot_tot = used + svfs.f_bavail
             u100 = used * 100
             usedpct = u100 / nonroot_tot + (u100 % nonroot_tot != 0)
-            scale = float(svfs.f_frsize) / 1000**3
-            print  fmt % ('', mp, used * scale, '', usedpct, nonroot_tot * scale)
+            used = size_to_human(used * svfs.f_frsize)
+            nonroot_tot = size_to_human(nonroot_tot * svfs.f_frsize)
+            print  fmt % ('', mp, used, usedpct, '', nonroot_tot)
             
 
 def quota_main():
