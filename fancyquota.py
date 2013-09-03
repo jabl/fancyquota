@@ -246,7 +246,6 @@ def nfs_lustre_quota(fss, lquota):
     for fs in fss:
         mp = map_fs(fs, fss)[0]
         for ld in lquota['dirs']:
-            #for d in lquota['dirs']:
             # O(n**2), argh
             if fss[fs][1][:3] == 'nfs' and ld in mp:
                 gid = os.stat(mp).st_gid
