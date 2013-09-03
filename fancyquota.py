@@ -132,6 +132,7 @@ def print_quota(quota):
     mountpoints, and the values is a tuple (usage, quota, limit,
     grace) of ints.
     """
+    from datetime import date
     fmt = "%-19s %-20s %7s %5.0f %7s %7s %s"
     for ug in quota:
         fsq = ug[1]
@@ -150,8 +151,12 @@ def print_quota(quota):
             use = size_to_human(fsq[k][0])
             q = size_to_human(fsq[k][1])
             hq = size_to_human(fsq[k][2])
-            if (hq > q):
-                grace = fsq[k][3]
+            gr = fsq[k][3]
+            if (gr != 0):
+                now = date.today()
+                gdate = date.fromtimestamp(gr)
+                td = gdate - now
+                grace = str(td.days) + 'days'
             else:
                 grace = ''
             pcent = float(fsq[k][0]) / fsq[k][1] * 100
