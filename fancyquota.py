@@ -245,11 +245,13 @@ def nfs_lustre_quota(fss, lquota):
     myquota = []
     kb = 1024
     mygids = os.getgroups()
+    done_mp = set()
     for fs in fss:
         mp = map_fs(fs, fss)[0]
         for ld in lquota['dirs']:
             # O(n**2), argh
             if fss[fs][1][:3] == 'nfs' and ld in mp:
+                done_mp.add(mp)
                 gid = os.stat(mp).st_gid
                 if gid in mygids:
                     url = lquota['url'] + '/?gid=' + str(gid)
@@ -266,10 +268,6 @@ def nfs_lustre_quota(fss, lquota):
                                                  int(lls[3]) * kb, grace)}))
 
     print_quota(myquota)
-    done_mp = set()
-    for q in myquota:
-        for e in q[1]:
-            done_mp.add(e)
     return done_mp
 
 def quota_main():
