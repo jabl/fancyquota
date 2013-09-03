@@ -37,11 +37,18 @@ fancyquota.cfg
 In the config file, you can put a list of directories, and environment
 variables pointing to directories, which must be visited (i.e. make
 the automounter mount them if they are unmounted). Multiple entries
-can be present, separated by commas. An example config file:
+can be present, separated by commas. An example config file section:
 
 [visit]
 envs=HOME, WRKDIR
 dirs=/usr,/tmp
+
+One can also specify settings for a Lustre quota gateway in the
+section [lquotagw]. Example:
+
+[lquotagw]
+url=http://127.0.0.1/
+dirs=/scratch, /work
 """
 
 import os
@@ -51,18 +58,28 @@ def parse_config():
     home_conf = os.path.expanduser('~/.config/fancyquota.cfg')
     config = ConfigParser.SafeConfigParser()
     config.read(['/etc/fancyquota.cfg', home_conf, 'fancyquota.cfg'])
-    if not config.has_section('visit'):
-        return []
-    envstr = config.get('visit', 'envs')
     dirs = []
-    for e in envstr.split(','):
-        d = os.getenv(e.strip())
-        if d:
-            dirs.append(d)
-    dirstr = config.get('visit', 'dirs')
-    for d in dirstr.split(','):
-        dirs.append(d.strip())
-    return dirs
+    if config.has_section('visit'):
+        envstr = config.get('visit', 'envs')
+        for e in envstr.split(','):
+            d = os.getenv(e.strip())
+            if d:
+                dirs.append(d)
+        dirstr = config.get('visit', 'dirs')
+        for d in dirstr.split(','):
+            dirs.append(d.strip())
+    lquota = {}
+    if config.has_section('lquotagw'):
+        lquota['url'] = config.get('lquotagw', 'url')
+        dirstr = config.get('lquotagw', 'dirs')
+        ld = []
+        for d in dirstr.split(','):
+            ld.append(d.strip())
+        lquota['dirs'] = ld
+    else:
+        lquota['url'] = 'http://127.0.0.1'
+        lquota['dirs'] = []
+    return dirs, lquota
 
 def visit_fs(dirs):
     """Visit file systems to ensure they are mounted."""
@@ -116,6 +133,8 @@ def size_to_human(val):
     elif val >= 10**3:
         val /= 10.**3
         suff = 'k'
+    else:
+        suff = ''
     return '%6.1f%s' % (val, suff)
 
 def print_header():
@@ -151,15 +170,21 @@ def print_quota(quota):
             use = size_to_human(fsq[k][0])
             q = size_to_human(fsq[k][1])
             hq = size_to_human(fsq[k][2])
-            gr = fsq[k][3]
-            if (gr != 0):
-                now = date.today()
-                gdate = date.fromtimestamp(gr)
-                td = gdate - now
-                grace = str(td.days) + 'days'
-            else:
-                grace = ''
-            pcent = float(fsq[k][0]) / fsq[k][1] * 100
+            try:
+                gr = int(fsq[k][3])
+                if (gr != 0):
+                    now = date.today()
+                    gdate = date.fromtimestamp(gr)
+                    td = gdate - now
+                    grace = str(td.days) + 'days'
+                else:
+                    grace = ''
+            except ValueError:
+                grace = fsq[k][3]
+            try:
+                pcent = float(fsq[k][0]) / fsq[k][1] * 100
+            except ZeroDivisionError:
+                pcent = float('Inf')
             print fmt % (ugstr, k, use, pcent, q, hq, grace)
 
 
@@ -208,7 +233,41 @@ def nfs_proj_quota(mps, done_mp):
             used = size_to_human(used * svfs.f_frsize)
             nonroot_tot = size_to_human(nonroot_tot * svfs.f_frsize)
             print  fmt % ('', mp, used, usedpct, '', nonroot_tot)
-            
+
+def nfs_lustre_quota(fss, lquota):
+    """Hack to show Lustre group quotas over NFS
+
+    When Lustre is re-exported over NFS and normal quota doesn't work
+    one can setup a simple script on a gateway machine which queries
+    the Lustre quota ('lfs quota').
+    """
+    import urllib2, grp
+    myquota = []
+    for fs in fss:
+        mp = map_fs(fs, fss)[0]
+        for ld in lquota['dirs']:
+            #for d in lquota['dirs']:
+            # O(n**2), argh
+            if fss[fs][1][:3] == 'nfs' and ld in mp:
+                gid = os.stat(mp).st_gid
+                url = lquota['url'] + '/?gid=' + str(gid)
+                lquotares = urllib2.urlopen(url).read()
+                lls = lquotares.split()
+                if lls[4] == '-':
+                    grace = 0
+                else:
+                    grace = lls[4]
+                group = grp.getgrgid(gid).gr_name
+                myquota.append(("group " + group, \
+                                    {mp:(int(lls[1]), int(lls[2]), \
+                                             int(lls[3]), grace)}))
+
+    print_quota(myquota)
+    done_mp = set()
+    for q in myquota:
+        for e in q[1]:
+            done_mp.add(e)
+    return done_mp
 
 def quota_main():
     """Main interface of the quota program."""
@@ -216,15 +275,18 @@ def quota_main():
     usage = """%prog [options]
 
 Print out disk quotas in a nice way, try to work with automounted file
-systems, and XFS project quotas over NFS.
+systems, XFS project quotas over NFS, and Lustre filesystems
+re-exported over NFS.
 """
     parser = OptionParser(usage, version="1.4")
     parser.parse_args()
-    dirs = parse_config()
+    dirs, lquota = parse_config()
     visit_fs(dirs)
     fss = read_mounts()
     print_header()
     done_mp = run_quota(fss)
+    done_mp2 = nfs_lustre_quota(fss, lquota)
+    done_mp = done_mp.union(done_mp2)
     nfs_proj_quota(fss, done_mp)
 
 
