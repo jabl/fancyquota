@@ -185,8 +185,7 @@ def run_quota(mp):
             # If over block quota, there will be a '*', remove it
             qb = int(ls[1].replace('*', '')) * bs
             curlist[map_fs(ls[0], mp)[0]] = (qb, int(ls[2]) * bs, \
-                                                 int(ls[3]) * bs, \
-                                                 int(ls[4]) * bs)
+                                                 int(ls[3]) * bs, int(ls[4]))
     p.close()
     print_quota(myquota)
     done_mp = set()
