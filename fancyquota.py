@@ -216,8 +216,7 @@ def quota_main():
     usage = """%prog [options]
 
 Print out disk quotas in a nice way, try to work with automounted file
-systems, and XFS project quotas over NFS. Quotas are reported in units
-of GB (1000**3 bytes).
+systems, and XFS project quotas over NFS.
 """
     parser = OptionParser(usage, version="1.4")
     parser.parse_args()
