@@ -278,7 +278,10 @@ def nfs_lustre_quota(fss, lquota, fgroups):
     mygids = os.getgroups()
     fgids = set()
     for g in fgroups:
-        fgids.add(grp.getgrnam(g).gr_gid)
+        try:
+            fgids.add(grp.getgrnam(g).gr_gid)
+        except KeyError:
+            pass
     done_mp = set()
     for fs in fss:
         mp = map_fs(fs, fss)[0]
