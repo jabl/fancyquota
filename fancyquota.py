@@ -49,6 +49,13 @@ section [lquotagw]. Example:
 [lquotagw]
 url=http://127.0.0.1/
 dirs=/scratch, /work
+
+It's possible to specify a list of groups for which quota will not be
+displayed. This can be useful to filter out e.g. the default primary
+group or such. Example:
+
+[filter]
+groups = domain users
 """
 
 import os
@@ -79,7 +86,12 @@ def parse_config():
     else:
         lquota['url'] = 'http://127.0.0.1'
         lquota['dirs'] = []
-    return dirs, lquota
+    fgroups = []
+    if config.has_section('filter'):
+        gstr = config.get('filter', 'groups')
+        for g in gstr.split(','):
+            fgroups.append(g.strip())
+    return dirs, lquota, fgroups
 
 def visit_fs(dirs):
     """Visit file systems to ensure they are mounted."""
@@ -145,26 +157,25 @@ def print_header():
 def print_quota(quota):
     """Pretty print quotas.
 
-    Input is a list, where each element is a tuple (ug, qd), where
-    'ug' is a string 'user foo' or 'group bar' specifying which
-    user/group the quota applies to. 'qd' is a dict where the keys are
-    mountpoints, and the values is a tuple (usage, quota, limit,
-    grace) of ints.
+    Input is a list, where each element is a tuple (ug, ugname, qd),
+    where 'ug' is a string 'user' or 'group' specifying whether it's a
+    user or group quota. 'ugname' is the name of the user/group the
+    quota applies to. 'qd' is a dict where the keys are mountpoints,
+    and the values is a tuple (usage, quota, limit, grace) of ints.
     """
     from datetime import date
     fmt = "%-19s %-20s %7s %5.0f %7s %7s %s"
     for ug in quota:
-        fsq = ug[1]
+        fsq = ug[2]
         quotas = []
         for vals in fsq.values():
             quotas.append(int(vals[1]))
-        s = ug[0].split()
-        if s[0] == 'user':
+        s = ug[0]
+        if s == 'user':
             ugstr = 'u:'
         else:
             ugstr = 'g:'
-        for e in s[1:]:
-            ugstr += e + ' '
+        ugstr += ug[1]
         ugstr = ugstr.strip()
         for k in fsq.keys():
             use = size_to_human(fsq[k][0])
@@ -188,7 +199,7 @@ def print_quota(quota):
             print fmt % (ugstr, k, use, pcent, q, hq, grace)
 
 
-def run_quota(mp):
+def run_quota(mp, fgroups):
     """Run the quota command and parse output.
     
     Checks both user and group quotas. Ignores file limits, just number of
@@ -202,9 +213,11 @@ def run_quota(mp):
     for line in p.readlines():
         if line.find("Disk quotas for") != -1:
             eind = line.find(' (')
-            current = " ".join(line[:eind].split()[3:])
+            ls = line[:eind].split()[3:]
+            ug = ls[0] # 'user' or 'group'
+            usrgrpname = " ".join(ls[1:]) # Name of user/group
             curlist = {}
-            myquota.append((current, curlist))
+            myquota.append((ug, usrgrpname, curlist))
         elif line.find("     Filesystem  blocks   quota   limit") == -1:
             ls = line.split()
             # If over block quota, there will be a '*', remove it
@@ -214,15 +227,22 @@ def run_quota(mp):
     p.close()
     done_mp = set()
     for q in myquota:
-        for e in q[1]:
+        for e in q[2]:
             done_mp.add(e)
+    q_to_del = []
+    myuid = os.geteuid()
+    for q in myquota:
+        if myuid != 0 and q[0] == 'group' and q[1] in fgroups:
+            q_to_del.append(q)
+    for q in q_to_del:
+        myquota.remove(q)
     for q in myquota:
         mp_to_del = []        
-        for e in q[1]:
+        for e in q[2]:
             if not os.access(e, os.R_OK):
                 mp_to_del.append(e)
         for e in mp_to_del:
-            del q[1][e]
+            del q[2][e]
     print_quota(myquota)
     return done_mp
 
@@ -245,7 +265,7 @@ def nfs_proj_quota(mps, done_mp):
             nonroot_tot = size_to_human(nonroot_tot * svfs.f_frsize)
             print  fmt % ('', mp, used, usedpct, '', nonroot_tot)
 
-def nfs_lustre_quota(fss, lquota):
+def nfs_lustre_quota(fss, lquota, fgroups):
     """Hack to show Lustre group quotas over NFS
 
     When Lustre is re-exported over NFS and normal quota doesn't work
@@ -256,6 +276,9 @@ def nfs_lustre_quota(fss, lquota):
     myquota = []
     kb = 1024
     mygids = os.getgroups()
+    fgids = set()
+    for g in fgroups:
+        fgids.add(grp.getgrnam(g).gr_gid)
     done_mp = set()
     for fs in fss:
         mp = map_fs(fs, fss)[0]
@@ -264,7 +287,7 @@ def nfs_lustre_quota(fss, lquota):
             if fss[fs][1][:3] == 'nfs' and ld in mp:
                 done_mp.add(mp)
                 gid = os.stat(mp).st_gid
-                if gid in mygids:
+                if gid in mygids and gid not in fgids:
                     url = lquota['url'] + '/?gid=' + str(gid)
                     lquotares = urllib2.urlopen(url).read()
                     lls = lquotares.split()
@@ -273,7 +296,7 @@ def nfs_lustre_quota(fss, lquota):
                     else:
                         grace = lls[4]
                     group = grp.getgrgid(gid).gr_name
-                    myquota.append(("group " + group, \
+                    myquota.append(('group', group, \
                                         {mp:(int(lls[1]) * kb, \
                                                  int(lls[2]) * kb, \
                                                  int(lls[3]) * kb, grace)}))
@@ -292,12 +315,12 @@ re-exported over NFS.
 """
     parser = OptionParser(usage, version="1.4")
     parser.parse_args()
-    dirs, lquota = parse_config()
+    dirs, lquota, fgroups = parse_config()
     visit_fs(dirs)
     fss = read_mounts()
     print_header()
-    done_mp = run_quota(fss)
-    done_mp2 = nfs_lustre_quota(fss, lquota)
+    done_mp = run_quota(fss, fgroups)
+    done_mp2 = nfs_lustre_quota(fss, lquota, fgroups)
     done_mp = done_mp.union(done_mp2)
     nfs_proj_quota(fss, done_mp)
 
