@@ -149,10 +149,48 @@ def size_to_human(val):
         suff = ''
     return '%6.1f%s' % (val, suff)
 
+def get_console_width():
+    """Get the width of the console.
+
+    Returns 80 <= console width <= 132
+    """
+    import os
+    env = os.environ
+    def ioctl_GWINSZ(fd):
+        try:
+            import fcntl, termios, struct, os
+            cr = struct.unpack('HHHH', fcntl.ioctl(fd, termios.TIOCGWINSZ,
+                                                   struct.pack('HHHH', 0, 
+                                                               0, 0, 0)))
+        except:
+            return
+        return cr[1]
+    cr = ioctl_GWINSZ(1) # stdout
+    if not cr:
+        cr = ioctl_GWINSZ(0) or ioctl_GWINSZ(1) or ioctl_GWINSZ(2)
+    if not cr:
+        try:
+            fd = os.open(os.ctermid(), os.O_RDONLY)
+            cr = ioctl_GWINSZ(fd)
+            os.close(fd)
+        except:
+            pass
+    if not cr:
+        cr = env.get('COLUMNS', 80)
+
+        ### Use get(key[, default]) instead of a try/catch
+        #try:
+        #    cr = (env['LINES'], env['COLUMNS'])
+        #except:
+        #    cr = (25, 80)
+    return min(max(int(cr), 80), 132)
+
 def print_header():
     """Print output header"""
-    hfmt = '%-19s %-20s %7s %5s %7s %7s %9s'
-    print hfmt % ('User/Group', 'Directory', 'Usage', 'Used%', 'Quota', 'Limit', 'Grace')
+    dir_width = console_width - 60  # console_width >= 80
+    hfmt = '%-19s %-*s %7s %5s %7s %7s %9s'
+    print hfmt % ('User/Group', dir_width, 'Directory', 'Usage', 'Used%', 
+                  'Quota', 'Limit', 'Grace')
 
 def print_quota(quota):
     """Pretty print quotas.
@@ -164,7 +202,8 @@ def print_quota(quota):
     and the values is a tuple (usage, quota, limit, grace) of ints.
     """
     from datetime import date
-    fmt = "%-19s %-20s %7s %5.0f %7s %7s %s"
+    fmt = "%-19s %-*s %7s %5.0f %7s %7s %s"
+    dir_width = console_width - 60
     for ug in quota:
         fsq = ug[2]
         quotas = []
@@ -196,7 +235,7 @@ def print_quota(quota):
                 pcent = float(fsq[k][0]) / fsq[k][1] * 100
             except ZeroDivisionError:
                 pcent = float('Inf')
-            print fmt % (ugstr, k, use, pcent, q, hq, grace)
+            print fmt % (ugstr, dir_width, k, use, pcent, q, hq, grace)
 
 
 def run_quota(mp, fgroups):
@@ -248,7 +287,8 @@ def run_quota(mp, fgroups):
 
 def nfs_proj_quota(mps, done_mp):
     """XFS project quotas over NFS are shown as the size of the file system"""
-    fmt = "%-19s %-20s %7s %5d %7s %7s"
+    fmt = "%-19s %-*s %7s %5d %7s %7s"
+    dir_width = console_width - 60
     for fs in mps:
         mp = map_fs(fs, mps)[0]
         if mps[fs][1][:3] == 'nfs' and mp not in done_mp:
@@ -263,7 +303,7 @@ def nfs_proj_quota(mps, done_mp):
             usedpct = u100 / nonroot_tot + (u100 % nonroot_tot != 0)
             used = size_to_human(used * svfs.f_frsize)
             nonroot_tot = size_to_human(nonroot_tot * svfs.f_frsize)
-            print  fmt % ('', mp, used, usedpct, '', nonroot_tot)
+            print  fmt % ('', dir_width, mp, used, usedpct, '', nonroot_tot)
 
 def nfs_lustre_quota(fss, lquota, fgroups):
     """Hack to show Lustre group quotas over NFS
@@ -321,6 +361,8 @@ re-exported over NFS.
     dirs, lquota, fgroups = parse_config()
     visit_fs(dirs)
     fss = read_mounts()
+    global console_width
+    console_width = get_console_width()
     print_header()
     done_mp = run_quota(fss, fgroups)
     done_mp2 = nfs_lustre_quota(fss, lquota, fgroups)
