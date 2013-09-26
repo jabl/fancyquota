@@ -356,7 +356,7 @@ Print out disk quotas in a nice way, try to work with automounted file
 systems, XFS project quotas over NFS, and Lustre filesystems
 re-exported over NFS.
 """
-    parser = OptionParser(usage, version="1.4")
+    parser = OptionParser(usage, version="1.5")
     parser.parse_args()
     dirs, lquota, fgroups = parse_config()
     visit_fs(dirs)
