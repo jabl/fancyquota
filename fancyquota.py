@@ -245,7 +245,9 @@ def run_quota(mp, fgroups):
     bytes.
     
     """
-    p = os.popen("/usr/bin/quota -ugwp")
+    from subprocess import Popen, PIPE
+    devnull = open(os.devnull, 'w')
+    p = Popen(['/usr/bin/quota', '-ugwp'], stdout=PIPE, stderr=devnull).stdout
     fs = ""
     myquota = []
     bs = 1024 # BLOCK_SIZE from sys/mount.h
@@ -264,6 +266,7 @@ def run_quota(mp, fgroups):
             curlist[map_fs(ls[0], mp)[0]] = (qb, int(ls[2]) * bs, \
                                                  int(ls[3]) * bs, int(ls[4]))
     p.close()
+    devnull.close()
     done_mp = set()
     for q in myquota:
         for e in q[2]:
@@ -329,7 +332,10 @@ def nfs_lustre_quota(fss, lquota, fgroups):
             # O(n**2), argh
             if fss[fs][1][:3] == 'nfs' and ld in mp:
                 done_mp.add(mp)
-                gid = os.stat(mp).st_gid
+                try:
+                    gid = os.stat(mp).st_gid
+                except OSError:
+                    continue
                 if gid in mygids and gid not in fgids:
                     url = lquota['url'] + '/?gid=' + str(gid)
                     lquotares = urllib2.urlopen(url).read()
@@ -358,7 +364,7 @@ Print out disk quotas in a nice way, try to work with automounted file
 systems, XFS project quotas over NFS, and Lustre filesystems
 re-exported over NFS.
 """
-    parser = OptionParser(usage, version="1.5")
+    parser = OptionParser(usage, version="1.6")
     parser.parse_args()
     dirs, lquota, fgroups = parse_config()
     visit_fs(dirs)
