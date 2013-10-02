@@ -339,8 +339,10 @@ def nfs_lustre_quota(fss, lquota, fgroups):
                     else:
                         grace = lls[4]
                     group = grp.getgrgid(gid).gr_name
+                    # If over block quota, there will be a '*', remove it
+                    qb = int(lls[1].replace('*', '')) * kb
                     myquota.append(('group', group, \
-                                        {mp:(int(lls[1]) * kb, \
+                                        {mp:(qb, \
                                                  int(lls[2]) * kb, \
                                                  int(lls[3]) * kb, grace)}))
 
