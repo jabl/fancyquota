@@ -69,7 +69,6 @@ def parse_config():
         home_conf = os.path.expanduser('~/.config/fancyquota.cfg')
     else:
         home_conf = os.path.join(config_home, 'fancyquota.cfg')
-    print home_conf, "foo"
     config = ConfigParser.SafeConfigParser()
     config.read(['/etc/fancyquota.cfg', home_conf, 'fancyquota.cfg'])
     dirs = []
