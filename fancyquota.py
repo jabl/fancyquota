@@ -35,7 +35,6 @@ The program tries to read a configuration file from the following locations
   XDF_CONFIG_HOME is not set
 - fancyquota.cfg
 
-If the XDG_CONFIG_HOME environment variable is not set, 
 In the config file, you can put a list of directories, and environment
 variables pointing to directories, which must be visited (i.e. make
 the automounter mount them if they are unmounted). Multiple entries
