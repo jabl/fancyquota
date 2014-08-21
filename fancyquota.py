@@ -3,7 +3,7 @@
 # vim: set fileencoding=utf-8
 
 """
-Copyright (c) 2008-2013 Janne Blomqvist
+Copyright (c) 2008-2014 Janne Blomqvist
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
@@ -30,10 +30,12 @@ automounter.
 
 The program tries to read a configuration file from the following locations
 
-/etc/fancyquota.cfg
-~/.config/fancyquota.cfg
-fancyquota.cfg
+- /etc/fancyquota.cfg
+- $XDG_CONFIG_HOME/fancyquota.cfg or ~/.config/fancyquota.cfg if
+  XDF_CONFIG_HOME is not set
+- fancyquota.cfg
 
+If the XDG_CONFIG_HOME environment variable is not set, 
 In the config file, you can put a list of directories, and environment
 variables pointing to directories, which must be visited (i.e. make
 the automounter mount them if they are unmounted). Multiple entries
@@ -56,13 +58,19 @@ group or such. Example:
 
 [filter]
 groups = domain users
+
 """
 
 import os
 
 def parse_config():
     import ConfigParser
-    home_conf = os.path.expanduser('~/.config/fancyquota.cfg')
+    config_home = os.getenv('XDG_CONFIG_HOME')
+    if not config_home:
+        home_conf = os.path.expanduser('~/.config/fancyquota.cfg')
+    else:
+        home_conf = os.path.join(config_home, 'fancyquota.cfg')
+    print home_conf, "foo"
     config = ConfigParser.SafeConfigParser()
     config.read(['/etc/fancyquota.cfg', home_conf, 'fancyquota.cfg'])
     dirs = []
@@ -364,7 +372,7 @@ Print out disk quotas in a nice way, try to work with automounted file
 systems, XFS project quotas over NFS, and Lustre filesystems
 re-exported over NFS.
 """
-    parser = OptionParser(usage, version="1.6")
+    parser = OptionParser(usage, version="1.7")
     parser.parse_args()
     dirs, lquota, fgroups = parse_config()
     visit_fs(dirs)
