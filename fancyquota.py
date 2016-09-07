@@ -96,6 +96,10 @@ def parse_config():
         gstr = config.get('filter', 'groups')
         for g in gstr.split(','):
             fgroups.append(g.strip())
+    # Make sure every dir ends with a "/", otherwise autofs won't
+    # mount it if it's an autofs mountpoint.
+    for i, d in enumerate(dirs):
+        dirs[i] = os.path.join(d, "")
     return dirs, lquota, fgroups
 
 def visit_fs(dirs):
