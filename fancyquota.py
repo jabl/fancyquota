@@ -70,14 +70,16 @@ def parse_config():
     config.read(['/etc/fancyquota.cfg', home_conf, 'fancyquota.cfg'])
     dirs = []
     if config.has_section('visit'):
-        envstr = config.get('visit', 'envs')
-        for e in envstr.split(','):
-            d = os.getenv(e.strip())
-            if d:
-                dirs.append(d)
-        dirstr = config.get('visit', 'dirs')
-        for d in dirstr.split(','):
-            dirs.append(d.strip())
+        if config.has_option('visit', 'envs'):
+            envstr = config.get('visit', 'envs')
+            for e in envstr.split(','):
+                d = os.getenv(e.strip())
+                if d:
+                    dirs.append(d)
+        if config.has_option('visit', 'dirs'):
+            dirstr = config.get('visit', 'dirs')
+            for d in dirstr.split(','):
+                dirs.append(d.strip())
     lquota = {}
     if config.has_section('lquotagw'):
         lquota['url'] = config.get('lquotagw', 'url')
