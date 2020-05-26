@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # vim: set fileencoding=utf-8
 
@@ -50,13 +50,13 @@ groups = domain users
 import os
 
 def parse_config():
-    import ConfigParser
+    import configparser
     config_home = os.getenv('XDG_CONFIG_HOME')
     if not config_home:
         home_conf = os.path.expanduser('~/.config/fancyquota.cfg')
     else:
         home_conf = os.path.join(config_home, 'fancyquota.cfg')
-    config = ConfigParser.SafeConfigParser()
+    config = configparser.ConfigParser()
     config.read(['/etc/fancyquota.cfg', home_conf, 'fancyquota.cfg'])
     dirs = []
     if config.has_section('visit'):
@@ -188,8 +188,8 @@ def print_header():
     """Print output header"""
     dir_width = console_width - 60  # console_width >= 80
     hfmt = '%-19s %-*s %7s %5s %7s %7s %9s'
-    print hfmt % ('User/Group', dir_width, 'Directory', 'Usage', 'Used%', 
-                  'Quota', 'Limit', 'Grace')
+    print(hfmt % ('User/Group', dir_width, 'Directory', 'Usage', 'Used%',
+                  'Quota', 'Limit', 'Grace'))
 
 def print_quota(quota):
     """Pretty print quotas.
@@ -234,7 +234,7 @@ def print_quota(quota):
                 pcent = float(fsq[k][0]) / fsq[k][1] * 100
             except ZeroDivisionError:
                 pcent = float('Inf')
-            print fmt % (ugstr, dir_width, k, use, pcent, q, hq, grace)
+            print(fmt % (ugstr, dir_width, k, use, pcent, q, hq, grace))
 
 
 def run_quota(mp, fgroups):
@@ -305,7 +305,7 @@ def nfs_proj_quota(mps, done_mp):
             usedpct = u100 / nonroot_tot + (u100 % nonroot_tot != 0)
             used = size_to_human(used * svfs.f_frsize)
             nonroot_tot = size_to_human(nonroot_tot * svfs.f_frsize)
-            print  fmt % ('', dir_width, mp, used, usedpct, '', nonroot_tot)
+            print(fmt % ('', dir_width, mp, used, usedpct, '', nonroot_tot))
 
 def nfs_lustre_quota(fss, lquota, fgroups):
     """Hack to show Lustre group quotas over NFS
