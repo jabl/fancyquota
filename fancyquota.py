@@ -246,7 +246,7 @@ def run_quota(mp, fgroups):
     """
     from subprocess import Popen, PIPE
     devnull = open(os.devnull, 'w')
-    p = Popen(['/usr/bin/quota', '-ugwp'], stdout=PIPE, stderr=devnull).stdout
+    p = Popen(['/usr/bin/quota', '-ugwp'], stdout=PIPE, stderr=devnull, text=True).stdout
     fs = ""
     myquota = []
     bs = 1024 # BLOCK_SIZE from sys/mount.h
@@ -314,7 +314,8 @@ def nfs_lustre_quota(fss, lquota, fgroups):
     one can setup a simple script on a gateway machine which queries
     the Lustre quota ('lfs quota').
     """
-    import urllib2, grp
+    import grp
+    from urllib.request import urlopen
     myquota = []
     kb = 1024
     mygids = os.getgroups()
@@ -337,7 +338,7 @@ def nfs_lustre_quota(fss, lquota, fgroups):
                     continue
                 if gid in mygids and gid not in fgids:
                     url = lquota['url'] + '/?gid=' + str(gid)
-                    lquotares = urllib2.urlopen(url).read()
+                    lquotares = urlopen(url).read()
                     lls = lquotares.split()
                     if lls[4] == '-':
                         grace = 0
